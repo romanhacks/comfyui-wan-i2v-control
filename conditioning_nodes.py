@@ -124,10 +124,14 @@ class WanI2VConditioningMaskPro:
             },
             "optional": {
                 "mask": ("MASK", {
-                    "tooltip": "Custom mask. White=fill/regenerate, Black=keep. Overrides mask_mode."
+                    "tooltip": "Custom mask. White=fill, Black=keep. Overrides depth_map and mask_mode."
+                }),
+                "use_image_alpha": ("BOOLEAN", {
+                    "default": False,
+                    "tooltip": "Use alpha channel from input image as mask. Transparent=fill, opaque=keep. Overrides external mask, depth_map, and mask_mode."
                 }),
                 "depth_map": ("IMAGE", {
-                    "tooltip": "Depth map image. White (close)=fill, Black (far)=keep."
+                    "tooltip": "Depth map image. White (close)=fill, Black (far)=keep. Overrides mask_mode only."
                 }),
                 "mask_mode": (["full", "top_half", "bottom_half", "left_half", "right_half",
                               "center", "edges", "gradient_top", "gradient_bottom",
@@ -164,16 +168,23 @@ class WanI2VConditioningMaskPro:
                     "step": 0.05,
                     "tooltip": "Mask intensity. Values below 1 let some original detail bleed through in filled areas, useful for subtle changes."
                 }),
+                "grow_mask": ("FLOAT", {
+                    "default": 0.0,
+                    "min": -0.5,
+                    "max": 0.5,
+                    "step": 0.01,
+                    "tooltip": "Expand or shrink the fill region. Positive=grow fill area, negative=shrink. Value is % of mask size (0.05=5% growth relative to masked area)."
+                }),
                 "feather": ("FLOAT", {
                     "default": 0.0,
                     "min": 0.0,
                     "max": 1.0,
                     "step": 0.05,
-                    "tooltip": "Soften mask edges (0=hard, 1=maximum blur)"
+                    "tooltip": "Blur mask edges for smooth transitions. Value scales from 0 (sharp) to 1 (blur radius ~25% of image). Applied after grow_mask."
                 }),
                 "invert_mask": ("BOOLEAN", {
                     "default": False,
-                    "tooltip": "Invert mask (swap protected and fill regions)"
+                    "tooltip": "Flip fill and keep regions. Applied last, after grow_mask, feather, and mask_strength."
                 }),
                 "text_strength": ("FLOAT", {
                     "default": 1.0,
@@ -185,7 +196,7 @@ class WanI2VConditioningMaskPro:
                 # Person Mask Generation (based on a-person-mask-generator by David Bielejeski)
                 "generate_person_mask": ("BOOLEAN", {
                     "default": False,
-                    "tooltip": "Enable built-in person/face mask generation using MediaPipe. Takes priority over external mask input."
+                    "tooltip": "Enable built-in person/face mask generation using MediaPipe. Highest priority - overrides all other mask sources."
                 }),
                 # Person Segmentation options
                 "mask_face": ("BOOLEAN", {
@@ -208,26 +219,26 @@ class WanI2VConditioningMaskPro:
                     "default": False,
                     "tooltip": "Include background in mask (requires generate_person_mask)"
                 }),
-                # Face Landmark options
+                # Face Landmark options (work best on close-ups or 720p+)
                 "mask_face_oval": ("BOOLEAN", {
                     "default": False,
-                    "tooltip": "Include full face oval outline (requires generate_person_mask)"
+                    "tooltip": "Full face oval outline. Works best on close-ups or 720p+ resolution."
                 }),
                 "mask_eyes": ("BOOLEAN", {
                     "default": False,
-                    "tooltip": "Include both eyes in mask (requires generate_person_mask)"
+                    "tooltip": "Both eyes. Works best on close-ups or 720p+ resolution."
                 }),
                 "mask_eyebrows": ("BOOLEAN", {
                     "default": False,
-                    "tooltip": "Include both eyebrows in mask (requires generate_person_mask)"
+                    "tooltip": "Both eyebrows. Works best on close-ups or 720p+ resolution."
                 }),
                 "mask_lips": ("BOOLEAN", {
                     "default": False,
-                    "tooltip": "Include lips/mouth in mask (requires generate_person_mask)"
+                    "tooltip": "Lips/mouth area. Works best on close-ups or 720p+ resolution."
                 }),
                 "mask_pupils": ("BOOLEAN", {
                     "default": False,
-                    "tooltip": "Include pupils only in mask (requires generate_person_mask)"
+                    "tooltip": "Pupils only. Works best on close-ups or 720p+ resolution."
                 }),
                 # Detection settings
                 "mask_confidence": ("FLOAT", {
@@ -478,10 +489,10 @@ class WanI2VConditioningMaskPro:
 
         return mask_tensor
 
-    def apply_mask(self, positive, negative, vae, image, mask=None, depth_map=None,
+    def apply_mask(self, positive, negative, vae, image, mask=None, use_image_alpha=False, depth_map=None,
                    mask_mode="full", depth_threshold=0.5, fill_brightness=0.5,
                    tint_fill=False, tint_color="",
-                   mask_strength=1.0, feather=0.0, invert_mask=False,
+                   mask_strength=1.0, grow_mask=0.0, feather=0.0, invert_mask=False,
                    text_strength=1.0,
                    # Person mask generation parameters
                    generate_person_mask=False,
@@ -504,32 +515,43 @@ class WanI2VConditioningMaskPro:
         img_h, img_w = image.shape[1], image.shape[2]
 
         # Create or process mask
-        # Priority: generate_person_mask > mask > depth_map > mask_mode preset
-        if generate_person_mask:
-            # Generate person/face mask using MediaPipe
+        # Priority: generate_person_mask > use_image_alpha > mask > depth_map > mask_mode preset
+        work_mask = None
+
+        # Check if image has alpha channel
+        has_alpha = image.shape[-1] == 4
+
+        # 1. Person mask generation (highest priority)
+        if work_mask is None and generate_person_mask:
             if not MEDIAPIPE_AVAILABLE:
                 print("[WanI2V] Warning: MediaPipe not available. Install with: pip install mediapipe")
                 print("[WanI2V] Falling back to other mask sources...")
-                # Fall through to next priority
-                generate_person_mask = False
+            else:
+                work_mask = self._generate_combined_person_mask(
+                    image,
+                    mask_face=mask_face, mask_hair=mask_hair,
+                    mask_body=mask_body, mask_clothes=mask_clothes,
+                    mask_background=mask_background,
+                    mask_face_oval=mask_face_oval, mask_eyes=mask_eyes,
+                    mask_eyebrows=mask_eyebrows, mask_lips=mask_lips,
+                    mask_pupils=mask_pupils,
+                    confidence=mask_confidence,
+                    refine_detection=refine_mask_detection
+                )
+                # Invert so detected = 0 (fill), undetected = 1 (keep)
+                work_mask = 1.0 - work_mask
 
-        if generate_person_mask:
-            # Generate internal person mask - ignore external mask input
-            work_mask = self._generate_combined_person_mask(
-                image,
-                mask_face=mask_face, mask_hair=mask_hair,
-                mask_body=mask_body, mask_clothes=mask_clothes,
-                mask_background=mask_background,
-                mask_face_oval=mask_face_oval, mask_eyes=mask_eyes,
-                mask_eyebrows=mask_eyebrows, mask_lips=mask_lips,
-                mask_pupils=mask_pupils,
-                confidence=mask_confidence,
-                refine_detection=refine_mask_detection
-            )
-            # Invert so detected = 0 (fill), undetected = 1 (keep)
-            # This matches the convention: detected areas will be regenerated
-            work_mask = 1.0 - work_mask
-        elif mask is not None:
+        # 2. Image alpha channel
+        if work_mask is None and use_image_alpha:
+            if has_alpha:
+                # Use alpha channel: transparent (0) = fill, opaque (1) = keep
+                alpha = image[0, :, :, 3]  # [H, W]
+                work_mask = alpha.unsqueeze(0).unsqueeze(0)  # [1, 1, H, W]
+            else:
+                print("[WanI2V] Warning: use_image_alpha enabled but image has no alpha channel. Falling back...")
+
+        # 3. External mask input
+        if work_mask is None and mask is not None:
             # Use custom mask (invert so white=fill, black=keep)
             work_mask = mask.clone()
             if len(work_mask.shape) == 2:
@@ -540,7 +562,9 @@ class WanI2VConditioningMaskPro:
             work_mask = F.interpolate(work_mask, size=(img_h, img_w), mode='bilinear', align_corners=False)
             # Invert: white input (1) → fill (0), black input (0) → keep (1)
             work_mask = 1.0 - work_mask
-        elif depth_map is not None:
+
+        # 4. Depth map
+        if work_mask is None and depth_map is not None:
             # Use depth map as mask
             # depth_map is IMAGE type: [B, H, W, C]
             # Convert to greyscale and use as mask
@@ -564,7 +588,9 @@ class WanI2VConditioningMaskPro:
             else:
                 # Use inverted depth values as gradient mask
                 work_mask = 1.0 - depth
-        else:
+
+        # 5. Preset mask modes (fallback)
+        if work_mask is None:
             # Create preset mask at image resolution
             work_mask = torch.ones((1, 1, img_h, img_w), device=image.device, dtype=image.dtype)
 
@@ -602,6 +628,30 @@ class WanI2VConditioningMaskPro:
                     for w in range(img_w):
                         dist = ((h - cy)**2 + (w - cx)**2) ** 0.5
                         work_mask[:, :, h, w] = 1.0 - min(dist / max_dist, 1.0)
+
+        # Apply grow/shrink mask
+        # Positive = grow fill area (erode the mask), Negative = shrink fill area (dilate the mask)
+        if grow_mask != 0.0:
+            # Calculate mask size as sqrt of filled area (characteristic dimension)
+            fill_pixels = (work_mask < 0.5).float().sum().item()
+            mask_size = max(1, int(fill_pixels ** 0.5))  # sqrt gives characteristic "radius"
+
+            # Calculate kernel size as percentage of mask size
+            grow_pixels = int(abs(grow_mask) * mask_size)
+            if grow_pixels >= 1:
+                kernel_size = grow_pixels * 2 + 1  # Must be odd
+                pad_size = grow_pixels
+
+                if grow_mask > 0:
+                    # Grow fill area = erode the mask (shrink white/keep regions)
+                    # Erosion via min pooling: -max_pool(-x)
+                    work_mask = F.pad(work_mask, (pad_size, pad_size, pad_size, pad_size), mode='replicate')
+                    work_mask = -F.max_pool2d(-work_mask, kernel_size, stride=1, padding=0)
+                else:
+                    # Shrink fill area = dilate the mask (expand white/keep regions)
+                    # Dilation via max pooling
+                    work_mask = F.pad(work_mask, (pad_size, pad_size, pad_size, pad_size), mode='replicate')
+                    work_mask = F.max_pool2d(work_mask, kernel_size, stride=1, padding=0)
 
         # Apply feathering
         # Use replicate padding to avoid feathering canvas edges
