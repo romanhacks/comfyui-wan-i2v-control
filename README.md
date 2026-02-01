@@ -10,6 +10,8 @@ A user-friendly way to selectively transform parts of your starting image in WAN
 
 This node pack intercepts the conditioning in WAN I2V and uses masking to control which parts of your **initial frame** get transformed. Instead of the whole starting image being subject to I2V transformation, you can target specific regions - like changing just a character's face while keeping the background intact in that first frame.
 
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-support-yellow?style=flat&logo=buy-me-a-coffee)](https://buymeacoffee.com/lorasandlenses)
+
 ## Use Cases
 
 - **Character transformation** - Change a person's appearance in the starting image while preserving the scene
@@ -101,8 +103,6 @@ With any I2V generation (including this project), the first couple of frames can
 Person and face detection powered by [MediaPipe](https://github.com/google-ai-edge/mediapipe).
 
 **Author:** Peter Neill (ShootTheSound)
-
-[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-support-yellow?style=flat&logo=buy-me-a-coffee)](https://buymeacoffee.com/lorasandlenses)
 
 ## License
 
