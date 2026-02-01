@@ -97,6 +97,29 @@ LIPS_INDICES = [
 LEFT_PUPIL_INDICES = [468, 469, 470, 471, 472]  # Left iris landmarks
 RIGHT_PUPIL_INDICES = [473, 474, 475, 476, 477]  # Right iris landmarks
 
+# Additional face regions
+NOSE_INDICES = [
+    1, 2, 3, 4, 5, 6, 19, 45, 48, 64, 94, 97, 98, 99, 115, 131,
+    195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206
+]
+
+LEFT_CHEEK_INDICES = [50, 100, 101, 119, 120, 121, 128, 203, 206, 207, 208, 216]
+RIGHT_CHEEK_INDICES = [266, 329, 330, 346, 347, 348, 349, 350, 280, 352, 411, 425]
+
+FOREHEAD_INDICES = [
+    10, 21, 54, 103, 104, 109, 67, 69, 108, 151, 299, 337, 338,
+    297, 332, 284, 251, 301, 293, 334, 296, 336, 9, 107, 66, 105
+]
+
+JAW_CHIN_INDICES = [
+    152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162,
+    21, 54, 103, 67, 109, 10, 338, 297, 332, 284, 251, 389, 356,
+    454, 323, 361, 288, 397, 365, 379, 378, 400, 377
+]
+
+LEFT_EAR_INDICES = [234, 127, 162, 21, 54, 103, 67, 109]
+RIGHT_EAR_INDICES = [454, 323, 361, 288, 397, 365, 379, 378]
+
 
 class WanI2VConditioningMaskPro:
     """
@@ -124,11 +147,7 @@ class WanI2VConditioningMaskPro:
             },
             "optional": {
                 "mask": ("MASK", {
-                    "tooltip": "Custom mask. White=fill, Black=keep. Overrides depth_map and mask_mode."
-                }),
-                "use_image_alpha": ("BOOLEAN", {
-                    "default": False,
-                    "tooltip": "Use alpha channel from input image as mask. Transparent=fill, opaque=keep. Overrides external mask, depth_map, and mask_mode."
+                    "tooltip": "Custom mask. White=fill, Black=keep. Overrides depth_map and mask_mode. Tip: LoadImage MASK output can be connected here for alpha masks."
                 }),
                 "depth_map": ("IMAGE", {
                     "tooltip": "Depth map image. White (close)=fill, Black (far)=keep. Overrides mask_mode only."
@@ -240,6 +259,26 @@ class WanI2VConditioningMaskPro:
                     "default": False,
                     "tooltip": "Pupils only. Works best on close-ups or 720p+ resolution."
                 }),
+                "mask_nose": ("BOOLEAN", {
+                    "default": False,
+                    "tooltip": "Nose area. Works best on close-ups or 720p+ resolution."
+                }),
+                "mask_cheeks": ("BOOLEAN", {
+                    "default": False,
+                    "tooltip": "Cheek areas. Works best on close-ups or 720p+ resolution."
+                }),
+                "mask_forehead": ("BOOLEAN", {
+                    "default": False,
+                    "tooltip": "Forehead area. Works best on close-ups or 720p+ resolution."
+                }),
+                "mask_jaw_chin": ("BOOLEAN", {
+                    "default": False,
+                    "tooltip": "Jaw and chin area. Works best on close-ups or 720p+ resolution."
+                }),
+                "mask_ears": ("BOOLEAN", {
+                    "default": False,
+                    "tooltip": "Both ears. Works best on close-ups or 720p+ resolution."
+                }),
                 # Detection settings
                 "mask_confidence": ("FLOAT", {
                     "default": 0.4,
@@ -251,6 +290,17 @@ class WanI2VConditioningMaskPro:
                 "refine_mask_detection": ("BOOLEAN", {
                     "default": True,
                     "tooltip": "Crop and re-run detection for better accuracy on smaller faces"
+                }),
+                "ignore_area": (["none", "left", "right", "top", "bottom"], {
+                    "default": "none",
+                    "tooltip": "Exclude a region from person/face detection. Use to isolate one person when multiple are in frame."
+                }),
+                "ignore_percent": ("FLOAT", {
+                    "default": 0.5,
+                    "min": 0.1,
+                    "max": 0.9,
+                    "step": 0.05,
+                    "tooltip": "% of image to ignore from selected edge (0.5 = half the image)."
                 }),
             }
         }
@@ -318,7 +368,9 @@ class WanI2VConditioningMaskPro:
     def _generate_face_landmark_mask(self, image_np: np.ndarray,
                                       include_face_oval: bool, include_eyes: bool,
                                       include_eyebrows: bool, include_lips: bool,
-                                      include_pupils: bool,
+                                      include_pupils: bool, include_nose: bool,
+                                      include_cheeks: bool, include_forehead: bool,
+                                      include_jaw_chin: bool, include_ears: bool,
                                       confidence: float) -> np.ndarray:
         """
         Generate face landmark mask using MediaPipe face mesh.
@@ -328,7 +380,8 @@ class WanI2VConditioningMaskPro:
             return np.zeros((image_np.shape[0], image_np.shape[1]), dtype=np.float32)
 
         # Check if any landmark options are enabled
-        if not any([include_face_oval, include_eyes, include_eyebrows, include_lips, include_pupils]):
+        if not any([include_face_oval, include_eyes, include_eyebrows, include_lips, include_pupils,
+                    include_nose, include_cheeks, include_forehead, include_jaw_chin, include_ears]):
             return np.zeros((image_np.shape[0], image_np.shape[1]), dtype=np.float32)
 
         model_path = get_mediapipe_model_path("face_landmarker.task")
@@ -413,6 +466,41 @@ class WanI2VConditioningMaskPro:
                                 fill=255
                             )
 
+                if include_nose:
+                    nose_pts = [landmarks[i] for i in NOSE_INDICES if i < len(landmarks)]
+                    if len(nose_pts) >= 3:
+                        draw.polygon(nose_pts, fill=255)
+
+                if include_cheeks:
+                    # Left cheek
+                    left_cheek_pts = [landmarks[i] for i in LEFT_CHEEK_INDICES if i < len(landmarks)]
+                    if len(left_cheek_pts) >= 3:
+                        draw.polygon(left_cheek_pts, fill=255)
+                    # Right cheek
+                    right_cheek_pts = [landmarks[i] for i in RIGHT_CHEEK_INDICES if i < len(landmarks)]
+                    if len(right_cheek_pts) >= 3:
+                        draw.polygon(right_cheek_pts, fill=255)
+
+                if include_forehead:
+                    forehead_pts = [landmarks[i] for i in FOREHEAD_INDICES if i < len(landmarks)]
+                    if len(forehead_pts) >= 3:
+                        draw.polygon(forehead_pts, fill=255)
+
+                if include_jaw_chin:
+                    jaw_pts = [landmarks[i] for i in JAW_CHIN_INDICES if i < len(landmarks)]
+                    if len(jaw_pts) >= 3:
+                        draw.polygon(jaw_pts, fill=255)
+
+                if include_ears:
+                    # Left ear
+                    left_ear_pts = [landmarks[i] for i in LEFT_EAR_INDICES if i < len(landmarks)]
+                    if len(left_ear_pts) >= 3:
+                        draw.polygon(left_ear_pts, fill=255)
+                    # Right ear
+                    right_ear_pts = [landmarks[i] for i in RIGHT_EAR_INDICES if i < len(landmarks)]
+                    if len(right_ear_pts) >= 3:
+                        draw.polygon(right_ear_pts, fill=255)
+
                 # Merge this face's mask
                 face_mask = np.array(mask_img, dtype=np.float32) / 255.0
                 combined_mask = np.maximum(combined_mask, face_mask)
@@ -425,7 +513,9 @@ class WanI2VConditioningMaskPro:
                                         mask_background: bool,
                                         mask_face_oval: bool, mask_eyes: bool,
                                         mask_eyebrows: bool, mask_lips: bool,
-                                        mask_pupils: bool,
+                                        mask_pupils: bool, mask_nose: bool,
+                                        mask_cheeks: bool, mask_forehead: bool,
+                                        mask_jaw_chin: bool, mask_ears: bool,
                                         confidence: float,
                                         refine_detection: bool) -> torch.Tensor:
         """
@@ -441,7 +531,8 @@ class WanI2VConditioningMaskPro:
 
         # Check if any segmentation options are enabled
         use_segmentation = any([mask_face, mask_hair, mask_body, mask_clothes, mask_background])
-        use_landmarks = any([mask_face_oval, mask_eyes, mask_eyebrows, mask_lips, mask_pupils])
+        use_landmarks = any([mask_face_oval, mask_eyes, mask_eyebrows, mask_lips, mask_pupils,
+                            mask_nose, mask_cheeks, mask_forehead, mask_jaw_chin, mask_ears])
 
         # Generate person segmentation mask
         if use_segmentation:
@@ -453,7 +544,8 @@ class WanI2VConditioningMaskPro:
         # Generate face landmark mask
         if use_landmarks:
             landmark_mask = self._generate_face_landmark_mask(
-                img_np, mask_face_oval, mask_eyes, mask_eyebrows, mask_lips, mask_pupils, confidence
+                img_np, mask_face_oval, mask_eyes, mask_eyebrows, mask_lips, mask_pupils,
+                mask_nose, mask_cheeks, mask_forehead, mask_jaw_chin, mask_ears, confidence
             )
             combined_mask = np.maximum(combined_mask, landmark_mask)
 
@@ -473,7 +565,8 @@ class WanI2VConditioningMaskPro:
                         # Re-run detection on cropped region
                         refined_mask = self._generate_face_landmark_mask(
                             crop, mask_face_oval, mask_eyes, mask_eyebrows,
-                            mask_lips, mask_pupils, confidence
+                            mask_lips, mask_pupils, mask_nose, mask_cheeks,
+                            mask_forehead, mask_jaw_chin, mask_ears, confidence
                         )
 
                         # Place refined mask back in full image coords
@@ -489,7 +582,7 @@ class WanI2VConditioningMaskPro:
 
         return mask_tensor
 
-    def apply_mask(self, positive, negative, vae, image, mask=None, use_image_alpha=False, depth_map=None,
+    def apply_mask(self, positive, negative, vae, image, mask=None, depth_map=None,
                    mask_mode="full", depth_threshold=0.5, fill_brightness=0.5,
                    tint_fill=False, tint_color="",
                    mask_strength=1.0, grow_mask=0.0, feather=0.0, invert_mask=False,
@@ -500,7 +593,10 @@ class WanI2VConditioningMaskPro:
                    mask_clothes=False, mask_background=False,
                    mask_face_oval=False, mask_eyes=False, mask_eyebrows=False,
                    mask_lips=False, mask_pupils=False,
-                   mask_confidence=0.4, refine_mask_detection=True):
+                   mask_nose=False, mask_cheeks=False, mask_forehead=False,
+                   mask_jaw_chin=False, mask_ears=False,
+                   mask_confidence=0.4, refine_mask_detection=True,
+                   ignore_area="none", ignore_percent=0.5):
         import comfy.utils
 
         # Get dimensions from existing conditioning
@@ -515,11 +611,8 @@ class WanI2VConditioningMaskPro:
         img_h, img_w = image.shape[1], image.shape[2]
 
         # Create or process mask
-        # Priority: generate_person_mask > use_image_alpha > mask > depth_map > mask_mode preset
+        # Priority: generate_person_mask > mask > depth_map > mask_mode preset
         work_mask = None
-
-        # Check if image has alpha channel
-        has_alpha = image.shape[-1] == 4
 
         # 1. Person mask generation (highest priority)
         if work_mask is None and generate_person_mask:
@@ -534,23 +627,16 @@ class WanI2VConditioningMaskPro:
                     mask_background=mask_background,
                     mask_face_oval=mask_face_oval, mask_eyes=mask_eyes,
                     mask_eyebrows=mask_eyebrows, mask_lips=mask_lips,
-                    mask_pupils=mask_pupils,
+                    mask_pupils=mask_pupils, mask_nose=mask_nose,
+                    mask_cheeks=mask_cheeks, mask_forehead=mask_forehead,
+                    mask_jaw_chin=mask_jaw_chin, mask_ears=mask_ears,
                     confidence=mask_confidence,
                     refine_detection=refine_mask_detection
                 )
                 # Invert so detected = 0 (fill), undetected = 1 (keep)
                 work_mask = 1.0 - work_mask
 
-        # 2. Image alpha channel
-        if work_mask is None and use_image_alpha:
-            if has_alpha:
-                # Use alpha channel: transparent (0) = fill, opaque (1) = keep
-                alpha = image[0, :, :, 3]  # [H, W]
-                work_mask = alpha.unsqueeze(0).unsqueeze(0)  # [1, 1, H, W]
-            else:
-                print("[WanI2V] Warning: use_image_alpha enabled but image has no alpha channel. Falling back...")
-
-        # 3. External mask input
+        # 2. External mask input (tip: connect LoadImage MASK output for alpha)
         if work_mask is None and mask is not None:
             # Use custom mask (invert so white=fill, black=keep)
             work_mask = mask.clone()
@@ -563,7 +649,7 @@ class WanI2VConditioningMaskPro:
             # Invert: white input (1) → fill (0), black input (0) → keep (1)
             work_mask = 1.0 - work_mask
 
-        # 4. Depth map
+        # 3. Depth map
         if work_mask is None and depth_map is not None:
             # Use depth map as mask
             # depth_map is IMAGE type: [B, H, W, C]
@@ -589,7 +675,7 @@ class WanI2VConditioningMaskPro:
                 # Use inverted depth values as gradient mask
                 work_mask = 1.0 - depth
 
-        # 5. Preset mask modes (fallback)
+        # 4. Preset mask modes (fallback)
         if work_mask is None:
             # Create preset mask at image resolution
             work_mask = torch.ones((1, 1, img_h, img_w), device=image.device, dtype=image.dtype)
@@ -628,6 +714,18 @@ class WanI2VConditioningMaskPro:
                     for w in range(img_w):
                         dist = ((h - cy)**2 + (w - cx)**2) ** 0.5
                         work_mask[:, :, h, w] = 1.0 - min(dist / max_dist, 1.0)
+
+        # Apply ignore area - set ignored region to "keep" (1.0)
+        if ignore_area != "none":
+            ignore_pixels = int(ignore_percent * (img_w if ignore_area in ["left", "right"] else img_h))
+            if ignore_area == "left":
+                work_mask[:, :, :, :ignore_pixels] = 1.0
+            elif ignore_area == "right":
+                work_mask[:, :, :, -ignore_pixels:] = 1.0
+            elif ignore_area == "top":
+                work_mask[:, :, :ignore_pixels, :] = 1.0
+            elif ignore_area == "bottom":
+                work_mask[:, :, -ignore_pixels:, :] = 1.0
 
         # Apply grow/shrink mask
         # Positive = grow fill area (erode the mask), Negative = shrink fill area (dilate the mask)
