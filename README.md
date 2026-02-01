@@ -1,75 +1,124 @@
-# Wan I2V Channel Controller
+# ComfyUI WAN I2V Control
 
-Custom ComfyUI nodes for controlling image conditioning in Wan 2.2 I2V models.
+Custom ComfyUI nodes for advanced control over WAN 2.1/2.2 Image-to-Video generation, featuring built-in person and face mask generation using MediaPipe.
 
-## What it does
+## Features
 
-The Wan I2V model has 36 input channels in its `patch_embedding` layer:
-- **Channels 0-15**: Latent input (standard diffusion)
-- **Channels 16-35**: Image conditioning (reference image)
+- **Built-in person/face masking** - No external mask nodes needed
+- **MediaPipe-powered detection** - Face, hair, body, clothes, background segmentation
+- **Fine-grained face landmarks** - Eyes, lips, nose, forehead, cheeks, and more
+- **Flexible mask modes** - Depth-based, preset patterns, or custom masks
+- **Channel manipulation** - Control how much influence the reference image has
 
-These nodes let you control how much influence the reference image has on generation, turning strict I2V into something more like an IP-Adapter.
+## Installation
+
+1. Clone into your ComfyUI custom_nodes folder:
+   ```bash
+   cd ComfyUI/custom_nodes
+   git clone https://github.com/shootthesound/comfyui-wan-i2v-control.git
+   ```
+
+2. Install dependencies:
+   ```bash
+   pip install mediapipe
+   ```
+
+3. Restart ComfyUI
 
 ## Nodes
 
-### Wan I2V Channel Controller
-Basic control over image influence.
+### WAN I2V Conditioning Mask Pro
 
-| Input | Type | Default | Description |
-|-------|------|---------|-------------|
-| model | MODEL | - | The Wan I2V model |
-| image_influence | float | 1.0 | 0.0 = ignore image, 1.0 = normal, 2.0 = amplified |
-| channel_group_a | float | 1.0 | Scale for channels 16-25 |
-| channel_group_b | float | 1.0 | Scale for channels 26-35 |
-| invert_influence | bool | False | Negate image channels |
+The main node for controlling what parts of the reference image influence the generated video.
 
-### Wan I2V Channel Controller (Advanced)
-Per-channel-group control with noise injection.
+**Mask Priority:** Person mask generation > External mask > Depth map > Preset mode
 
-| Input | Type | Default | Description |
-|-------|------|---------|-------------|
-| model | MODEL | - | The Wan I2V model |
-| image_influence | float | 1.0 | Overall scaling (can be negative) |
-| channels_0_4 | float | 1.0 | Scale for image channels 0-4 |
-| channels_5_9 | float | 1.0 | Scale for image channels 5-9 |
-| channels_10_14 | float | 1.0 | Scale for image channels 10-14 |
-| channels_15_19 | float | 1.0 | Scale for image channels 15-19 |
-| noise_injection | float | 0.0 | Add random noise for variation |
-| noise_seed | int | 0 | Seed for noise |
+#### Person Segmentation (MediaPipe)
+| Option | Description |
+|--------|-------------|
+| `mask_face` | Face skin area |
+| `mask_hair` | Hair |
+| `mask_body` | Body/skin |
+| `mask_clothes` | Clothing |
+| `mask_background` | Background |
 
-### Wan I2V Channel Analyzer
-Analyzes the model's patch_embedding and outputs statistics.
+#### Face Landmarks (works best on close-ups or 720p+)
+| Option | Description |
+|--------|-------------|
+| `mask_face_oval` | Full face oval outline |
+| `mask_eyes` | Both eyes |
+| `mask_eyebrows` | Both eyebrows |
+| `mask_lips` | Lips/mouth |
+| `mask_pupils` | Pupils only |
+| `mask_nose` | Nose area |
+| `mask_cheeks` | Cheek areas |
+| `mask_forehead` | Forehead area |
+| `mask_jaw_chin` | Jaw and chin |
+| `mask_ears` | Both ears |
 
-## Usage
+#### Mask Controls
+| Option | Description |
+|--------|-------------|
+| `mask_mode` | Preset patterns: full, face_focus, soft_vignette, etc. |
+| `mask_strength` | Blend between masked (0.0) and unmasked (1.0) |
+| `grow_mask` | Expand/contract mask (positive = grow, negative = shrink) |
+| `feather` | Soft edge blur radius |
+| `invert_mask` | Flip fill/keep regions |
+| `ignore_area` | Exclude left/right/top/bottom portion from detection |
 
-```
-[Load Diffusion Model] → [Wan I2V Channel Controller] → [Rest of Workflow]
-```
+#### Fill Options
+| Option | Description |
+|--------|-------------|
+| `fill_brightness` | Brightness of filled areas (0.0-1.0) |
+| `tint_fill` | Apply color tint to filled areas |
+| `tint_color` | Hex color for tint (e.g., #FF0000) |
 
-## Examples
+### WAN I2V Channel Controller
 
-**Soft I2V (IP-Adapter-like):**
-- `image_influence = 0.3`
-- Image becomes a loose style/composition guide
+Basic control over image influence in the model's conditioning channels.
 
-**Anti-Reference:**
-- `image_influence = 1.0`
-- `invert_influence = True`
-- Output actively diverges from input
+| Input | Description |
+|-------|-------------|
+| `image_influence` | 0.0 = ignore image, 1.0 = normal, 2.0 = amplified |
+| `channel_group_a` | Scale for channels 16-25 |
+| `channel_group_b` | Scale for channels 26-35 |
+| `invert_influence` | Negate image channels |
 
-**Selective Influence:**
-- `channel_group_a = 0.8` (structure?)
-- `channel_group_b = 0.2` (style?)
-- Experiment to find what each group controls
+### WAN I2V Channel Controller (Advanced)
+
+Per-channel-group control with noise injection for more variation.
+
+## Usage Examples
+
+**Regenerate face while keeping background:**
+- Enable `generate_person_mask`
+- Set `mask_face = True`
+- Detected face will be regenerated, background preserved
+
+**Soft eye enhancement:**
+- Enable `generate_person_mask`
+- Set `mask_eyes = True`
+- Set `mask_strength = 0.5` for subtle effect
+
+**Isolate one person in frame:**
+- Set `ignore_area = "left"` or `"right"`
+- Set `ignore_percent = 0.5`
+- Only the person on one side will be detected
+
+**Use alpha from transparent PNG:**
+- Connect LoadImage's MASK output to the `mask` input
+- The alpha channel controls which areas are filled
 
 ## Compatibility
 
-- Works with Wan 2.2 I2V models (high and low noise)
-- Passes through T2V models unchanged
+- WAN 2.1 and 2.2 I2V models
 - Works with fp16 and fp8 models
-
-## Notes
-
-- The node clones the model, so the original is not modified
-- Changes only affect the current workflow execution
 - Stacks with LoRAs and other model modifications
+
+## Credits
+
+Person mask generation based on [a-person-mask-generator](https://github.com/djbielejeski/a-person-mask-generator) by David Bielejeski.
+
+## License
+
+MIT
