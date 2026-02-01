@@ -2,6 +2,10 @@
 
 A user-friendly way to selectively transform parts of your starting image in WAN Image-to-Video generation.
 
+[![Watch the demo](https://img.youtube.com/vi/A-3_YXVo6LM/maxresdefault.jpg)](https://youtu.be/A-3_YXVo6LM)
+
+**[Watch the demo video](https://youtu.be/A-3_YXVo6LM)**
+
 ## What It Does
 
 This node pack intercepts the conditioning in WAN I2V and uses masking to control which parts of your **initial frame** get transformed. Instead of the whole starting image being subject to I2V transformation, you can target specific regions - like changing just a character's face while keeping the background intact in that first frame.
@@ -24,6 +28,10 @@ pip install mediapipe
 Restart ComfyUI. Example workflows are included in the `example_workflows` folder.
 
 ## Quick Start
+
+**Try the example workflow first!** Load `example_workflows/Wan Demo.json` - this is the workflow from the demo video.
+
+Or build your own:
 
 1. Add **WAN I2V Conditioning Mask Pro** node to your workflow
 2. Connect it between your conditioning and the sampler
