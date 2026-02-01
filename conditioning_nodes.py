@@ -212,7 +212,7 @@ class WanI2VConditioningMaskPro:
                     "step": 0.05,
                     "tooltip": "Scale text conditioning strength. >1.0 boosts text influence for sharper results."
                 }),
-                # Person Mask Generation (based on a-person-mask-generator by David Bielejeski)
+                # Person Mask Generation (powered by MediaPipe)
                 "generate_person_mask": ("BOOLEAN", {
                     "default": False,
                     "tooltip": "Enable built-in person/face mask generation using MediaPipe. Highest priority - overrides all other mask sources."

@@ -117,7 +117,7 @@ Per-channel-group control with noise injection for more variation.
 
 ## Credits
 
-Person mask generation based on [a-person-mask-generator](https://github.com/djbielejeski/a-person-mask-generator) by David Bielejeski.
+Person and face mask generation powered by [MediaPipe](https://github.com/google-ai-edge/mediapipe).
 
 ## License
 
