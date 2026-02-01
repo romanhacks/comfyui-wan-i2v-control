@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git init:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(python -m py_compile:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(winget install:*)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" auth status)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" repo create comfyui-wan-i2v-control --public --source=. --remote=origin --push --description \"ComfyUI node for WAN I2V control with built-in person/face mask generation using MediaPipe\")",
+      "Bash(git push)"
+    ]
+  }
+}
