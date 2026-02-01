@@ -1,123 +1,88 @@
 # ComfyUI WAN I2V Control
 
-Custom ComfyUI nodes for advanced control over WAN 2.1/2.2 Image-to-Video generation, featuring built-in person and face mask generation using MediaPipe.
+A user-friendly way to selectively transform parts of your starting image in WAN Image-to-Video generation.
 
-## Features
+## What It Does
 
-- **Built-in person/face masking** - No external mask nodes needed
-- **MediaPipe-powered detection** - Face, hair, body, clothes, background segmentation
-- **Fine-grained face landmarks** - Eyes, lips, nose, forehead, cheeks, and more
-- **Flexible mask modes** - Depth-based, preset patterns, or custom masks
-- **Channel manipulation** - Control how much influence the reference image has
+This node pack intercepts the conditioning in WAN I2V and uses masking to control which parts of your **initial frame** get transformed. Instead of the whole starting image being subject to I2V transformation, you can target specific regions - like changing just a character's face while keeping the background intact in that first frame.
+
+## Use Cases
+
+- **Character transformation** - Change a person's appearance in the starting image while preserving the scene
+- **Selective regeneration** - Fix just the face or hair in your initial frame
+- **Multi-person scenes** - Target only one person when there are multiple in frame
+- **Scene continuity** - Take the last frame of a previous I2V clip, regenerate the character's face, then continue to the next video segment
 
 ## Installation
 
-1. Clone into your ComfyUI custom_nodes folder:
-   ```bash
-   cd ComfyUI/custom_nodes
-   git clone https://github.com/shootthesound/comfyui-wan-i2v-control.git
-   ```
+```bash
+cd ComfyUI/custom_nodes
+git clone https://github.com/shootthesound/comfyui-wan-i2v-control.git
+pip install mediapipe
+```
 
-2. Install dependencies:
-   ```bash
-   pip install mediapipe
-   ```
+Restart ComfyUI. Example workflows are included in the `example_workflows` folder.
 
-3. Restart ComfyUI
+## Quick Start
 
-## Nodes
+1. Add **WAN I2V Conditioning Mask Pro** node to your workflow
+2. Connect it between your conditioning and the sampler
+3. Enable `generate_person_mask`
+4. Select what to change: `mask_face`, `mask_hair`, `mask_body`, `mask_clothes`
+5. Run - only the selected regions will be transformed
 
-### WAN I2V Conditioning Mask Pro
+## Targeting One Person in a Multi-Person Scene
 
-The main node for controlling what parts of the reference image influence the generated video.
+When you have multiple people in frame and only want to change one:
 
-**Mask Priority:** Person mask generation > External mask > Depth map > Preset mode
+1. Set `ignore_area` to "left" or "right"
+2. Set `ignore_percent` to 0.5 (or adjust as needed)
+3. Only the person on the non-ignored side will be detected and transformed
 
-#### Person Segmentation (MediaPipe)
+## Mask Options
+
+**Built-in Person Detection (MediaPipe):**
+- `mask_face` - Face skin area
+- `mask_hair` - Hair
+- `mask_body` - Body/skin
+- `mask_clothes` - Clothing
+- `mask_background` - Background only
+
+**Face Landmarks** (works best on close-ups or 720p+):
+- `mask_face_oval`, `mask_eyes`, `mask_eyebrows`, `mask_lips`, `mask_pupils`
+- `mask_nose`, `mask_cheeks`, `mask_forehead`, `mask_jaw_chin`, `mask_ears`
+
+**Preset Modes** (when not using person detection):
+- `full`, `face_focus`, `top_half`, `bottom_half`, `left_half`, `right_half`
+- `center`, `edges`, `gradient_top`, `gradient_bottom`, `soft_vignette`
+
+**External Inputs:**
+- Connect a custom `mask` input (overrides built-in detection)
+- Connect a `depth_map` for distance-based masking with `depth_threshold`
+
+## Controls
+
 | Option | Description |
 |--------|-------------|
-| `mask_face` | Face skin area |
-| `mask_hair` | Hair |
-| `mask_body` | Body/skin |
-| `mask_clothes` | Clothing |
-| `mask_background` | Background |
+| `mask_strength` | Blend between masked and unmasked (0.0-1.0) |
+| `grow_mask` | Expand (positive) or shrink (negative) the mask |
+| `feather` | Soft edge blur |
+| `invert_mask` | Flip which regions get changed |
+| `text_strength` | Adjust prompt influence relative to the image |
+| `tint_fill` / `tint_color` | Tint masked regions (experimental, results vary) |
 
-#### Face Landmarks (works best on close-ups or 720p+)
-| Option | Description |
-|--------|-------------|
-| `mask_face_oval` | Full face oval outline |
-| `mask_eyes` | Both eyes |
-| `mask_eyebrows` | Both eyebrows |
-| `mask_lips` | Lips/mouth |
-| `mask_pupils` | Pupils only |
-| `mask_nose` | Nose area |
-| `mask_cheeks` | Cheek areas |
-| `mask_forehead` | Forehead area |
-| `mask_jaw_chin` | Jaw and chin |
-| `mask_ears` | Both ears |
+## Tips
 
-#### Mask Controls
-| Option | Description |
-|--------|-------------|
-| `mask_mode` | Preset patterns: full, face_focus, soft_vignette, etc. |
-| `mask_strength` | Blend between masked (0.0) and unmasked (1.0) |
-| `grow_mask` | Expand/contract mask (positive = grow, negative = shrink) |
-| `feather` | Soft edge blur radius |
-| `invert_mask` | Flip fill/keep regions |
-| `ignore_area` | Exclude left/right/top/bottom portion from detection |
-
-#### Fill Options
-| Option | Description |
-|--------|-------------|
-| `fill_brightness` | Brightness of filled areas (0.0-1.0) |
-| `tint_fill` | Apply color tint to filled areas |
-| `tint_color` | Hex color for tint (e.g., #FF0000) |
-
-### WAN I2V Channel Controller
-
-Basic control over image influence in the model's conditioning channels.
-
-| Input | Description |
-|-------|-------------|
-| `image_influence` | 0.0 = ignore image, 1.0 = normal, 2.0 = amplified |
-| `channel_group_a` | Scale for channels 16-25 |
-| `channel_group_b` | Scale for channels 26-35 |
-| `invert_influence` | Negate image channels |
-
-### WAN I2V Channel Controller (Advanced)
-
-Per-channel-group control with noise injection for more variation.
-
-## Usage Examples
-
-**Regenerate face while keeping background:**
-- Enable `generate_person_mask`
-- Set `mask_face = True`
-- Detected face will be regenerated, background preserved
-
-**Soft eye enhancement:**
-- Enable `generate_person_mask`
-- Set `mask_eyes = True`
-- Set `mask_strength = 0.5` for subtle effect
-
-**Isolate one person in frame:**
-- Set `ignore_area = "left"` or `"right"`
-- Set `ignore_percent = 0.5`
-- Only the person on one side will be detected
-
-**Use alpha from transparent PNG:**
-- Connect LoadImage's MASK output to the `mask` input
-- The alpha channel controls which areas are filled
-
-## Compatibility
-
-- WAN 2.1 and 2.2 I2V models
-- Works with fp16 and fp8 models
-- Stacks with LoRAs and other model modifications
+- The first couple of frames can sometimes be garbled - consider dropping them in post
+- Higher resolution (720p+) gives better face landmark detection
+- For best results with face features, use close-up shots
+- You can use LoadImage's MASK output for alpha-based masking from transparent PNGs
 
 ## Credits
 
-Person and face mask generation powered by [MediaPipe](https://github.com/google-ai-edge/mediapipe).
+Person and face detection powered by [MediaPipe](https://github.com/google-ai-edge/mediapipe).
+
+**Author:** Peter Neill (ShootTheSound)
 
 ## License
 
