@@ -95,6 +95,7 @@ With any I2V generation (including this project), the first couple of frames can
 
 ## Tips
 
+- **Ghost edges?** Try setting `feather` to around 0.015 - helps blend the edges of dynamic masks
 - The first couple of frames in I2V can be weird - use the Drop First Frames node
 - Higher resolution (720p+) gives better face landmark detection
 - For best results with face features, use close-up shots
