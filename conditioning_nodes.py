@@ -1,6 +1,6 @@
 """
-Wan I2V Conditioning Manipulation Nodes
-=======================================
+Wan I2V Conditioning Manipulation Node And Frame Drop Node
+==========================================================
 
 Person mask generation uses Google MediaPipe for segmentation and face landmarks.
 https://ai.google.dev/edge/mediapipe/solutions/guide
