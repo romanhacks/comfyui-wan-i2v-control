@@ -106,6 +106,10 @@ Person and face detection powered by [MediaPipe](https://github.com/google-ai-ed
 
 **Author:** Peter Neill (ShootTheSound)
 
+## Contributing
+
+PRs welcome! Particularly interested in adding support for first frame / last frame / middle frame targeting.
+
 ## License
 
 MIT
