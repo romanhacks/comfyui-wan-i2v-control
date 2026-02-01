@@ -19,6 +19,8 @@ This node pack intercepts the conditioning in WAN I2V and uses masking to contro
 - **Multi-person scenes** - Target only one person when there are multiple in frame
 - **Scene continuity** - Take the last frame of a previous I2V clip, regenerate the character's face, then continue to the next video segment
 
+*An LTX 2 version is planned if there is sufficient interest.*
+
 ## Installation
 
 ```bash
