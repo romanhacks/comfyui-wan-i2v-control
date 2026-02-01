@@ -33,7 +33,7 @@ Restart ComfyUI. Example workflows are included in the `example_workflows` folde
 
 ## Quick Start
 
-**Try the example workflow first!** Load `example_workflows/Wan Demo.json` - this is the workflow from the demo video.
+**Try the example workflow first!** Load `example_workflows/Wan Demo.json` -- this is the workflow from the demo video and will give you the best start.
 
 Or build your own:
 
