@@ -71,9 +71,19 @@ When you have multiple people in frame and only want to change one:
 | `text_strength` | Adjust prompt influence relative to the image |
 | `tint_fill` / `tint_color` | Tint masked regions (experimental, results vary) |
 
+## Drop First Frames Node
+
+Also included is **Drop First Frames** - a simple but useful utility node for any I2V workflow, not just this pack.
+
+With any I2V generation (including this project), the first couple of frames can sometimes be garbled or weird. This node lets you drop them automatically:
+
+- Connect your video output to this node
+- Set `frames_to_drop` (default: 4)
+- Clean output with the bad frames removed
+
 ## Tips
 
-- The first couple of frames can sometimes be garbled - consider dropping them in post
+- The first couple of frames in I2V can be weird - use the Drop First Frames node
 - Higher resolution (720p+) gives better face landmark detection
 - For best results with face features, use close-up shots
 - You can use LoadImage's MASK output for alpha-based masking from transparent PNGs
